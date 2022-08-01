@@ -107,7 +107,7 @@ main;
       printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
       | tee -a ~/standalone/.config/config
 
-# Копирование секретов smtp-сервера в случае kubectl 1.19 // \> для экранирования //Проверено на Stage
+# Копирование секретов smtp-сервера в случае K8S 1.19 // \> для экранирования //Проверено на Stage
 if [ $(kubectl get nodes -n standalone | awk '{print $5}' | tail +4 ) \> v1.19.00 ]; then
   LEARN_APP_POD_NAME=$(kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
   LEARN_APP_SECRET_NAME=$(sudo kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name|test("learn-app-env-secret.*")?) | .secretRef.name')
