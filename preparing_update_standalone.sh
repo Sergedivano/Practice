@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# Записываем лог работы скрипта обновления
-./update_standalone.sh 2>&1 | tee update-$(date +%F %T).log
-
 # ПРОВЕРКА ПРАВ АДМИНА тестить под разными пользователями и EUID и UID //Проверено на Stage
 if [ "$UID" -ne "$ROOT_UID" ]; then 
-  echo "Для продолжения необходимо авторизоваться с правами root: sudo su"
+  echo "Для продолжения необходимы права root: sudo su"
   exit $E_NOTROOT
 fi  
 
-# Проверка - Новая установка или обновление //Проверено на Stage
-if [ $(kubectl get namespaces | grep standalone | wc -l) > 0 ] ; then
-  echo "Будет выполнено обновление...";
-else 
-  echo "Для первичной установки серверной версии СДО iSpring Learn обратитесь в iSpring Support support@ispring.ru";
+# Проверка установленного standalone //Проверено на Stage
+if [ $(kubectl get namespaces | grep standalone | wc -l) < 1 ] ; then 
+  echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru"
+  exit 1
 fi  
 
 # Проверка доступа к файлу конфигурации
 if [[ -z "$1" ]]; then
-  echo "Необходимо передать путь к файлу конфигурации ~/путь к конфигу"
+  echo "Необходимо передать путь к файлу конфигурации ~/путь к "
   echo "команды"
   echo "команды"
   echo "команды"
@@ -56,35 +52,34 @@ function standalone_backup () {
 function free_space on master () {
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
     if [ $FREE_SPACE < 8 ]; then
-        echo "Объем свободного диского пространства должен составлять не менее 8G."
-        echo "Cейчас $FREE_SPACE. Продолжить обновление? (yes/no)"
+        echo "Для обновления требуется не менее 8G свободного диского пространства."
+        echo "Cейчас $FREE_SPACE. Продолжить подготовку к обновлению? (yes/no)"
         read -r confirmation
             if [ "$confirmation" == 'no' ]; then
-                echo "Обновление отменено"
+                echo "Подготовка к обновлению отменена"
                 exit 0
             fi   
     fi  
 }
 
-
 main() {
     function standalone_backup;
     function free_space on master;
-    # Скачивание дистрибутива и слоя совместимости
+    # Скачивание и распаковка дистрибутива и слоя совместимости
     cd /root
     wget '$BUILD_URL' -O standalone.tar.gz
     tar -xvhf standalone.tar.gz
-    # Проверка, что распаковалось
- 
     wget '$CONFIG_FILE' -O config.tar.gz
     tar -xvhf config.tar.gz -C standalone
-    # Проверка, что распаковалось
 
     #Скопировать файл config из старой папки с дистрибутивом в новый  
     cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
 
 }
 main;
+
+
+
 
 
 # КОПИРОВАНИЕ КАСТОМНЫХ СЕРТИФИКАТОВ
@@ -122,18 +117,12 @@ else
   exit 1
 fi  
 
-# ПРОВЕРКА КОНФИГОВ
-echo "Вручную осмотреть Соответствие конфига вашим учетным данным.\nКонфигурационные файлы находятся в:\n~/standalone/.config/compatibility/config\n ~/standalone/.config/config"
 
-# ЗАПУСК СКРИПТА ОБНОВЛЕНИЯ
-  screen
-  ./install.sh 2>&1 | tee install.log
-
-# ПРОВЕРКА install.log
-  echo "Вручную осмотреть файл install.log на наличие ошибок в разделе *PLAY RECAP*. Столбцы failed и unreachable должны содержать значение =0 . \n Для чтения файла выполните команду: cat install.log"
-
-# ПРОВЕРКА POD в namespace standalone
-kubectl get pod -n standalone | grep -v -E "Running|Completed|Evicted"
+echo "Подготовка к обновлению завершена."
+echo "Для запуска обновления перейдите в screen и запустите скрипт установщика install.sh с записью обновления в лог файл.
+screen
+cd /root/standalone
+./install.sh 2>&1 | tee install.log"
 
 
 
