@@ -5,21 +5,21 @@ set -o errexit
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
 if [ "$UID" != "$ROOT_UID" ]; then
-  echo "У вас недостаточно прав для запуска этого скрипта. Для продолжения авторизоваться с правами root или использовать sudo su."
-  exit 1
+    echo "У вас недостаточно прав для запуска этого скрипта. Для продолжения авторизоваться с правами root или использовать sudo su."
+    exit 1
 fi
 
 # Проверка установленного standalone
 if [ $(kubectl get namespaces | grep standalone | wc -l) -lt 1 ] ; then
-  echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru."
-  exit 1
+    echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru."
+    exit 1
 fi
 
 if [[ -z "$1" ]]; then
-  echo "Необходимо передать путь к файлу 'config'."
-  echo "Пример команды для запуска скрипта подготовки к обновлению:
-        ./preparing_update_standalone.sh /standalone/config"
-  exit 1
+    echo "Необходимо передать путь к файлу 'config'."
+    echo "Пример команды для запуска скрипта подготовки к обновлению:
+          ./preparing_update_standalone.sh /standalone/config"
+    exit 1
 fi
 
 # Установка jq
@@ -29,12 +29,12 @@ apt-get install jq
 # Проверка наличия файла 'config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
 function check_config () {
     if [[ -z "$BUILD_URL" ]]; then
-      echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'config' $BUILD_URL"
-      exit 1
+        echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'config' $BUILD_URL"
+        exit 1
     fi
     if [[ -z "$CONFIG_URL" ]]; then
-      echo "Скрипт ожидает URL-ссылку на конфигурационный файл 'config' $CONFIG_URL"
-      exit 1
+        echo "Скрипт ожидает URL-ссылку на конфигурационный файл 'config' $CONFIG_URL"
+        exit 1
     fi
 }
 
@@ -43,9 +43,9 @@ function standalone_backup () {
     STANDALONE_BACKUP_DIR="/root/standalone-backup-$(date +%F)"
     if [ ! -d "$STANDALONE_BACKUP_DIR" ]; then
         mv ~/standalone "$STANDALONE_BACKUP_DIR"
-        echo "Бэкап создан."
+        echo "Backup директории root/standalone выполнен."
     else
-        echo "Бэкап был создан ранее."
+        echo "Backup директории root/standalone был выполнен ранее."
     fi
 }
 
@@ -66,33 +66,30 @@ function free_space_on_master () {
 
 # Проверка кастомных сертификатов
 function check_custom_certificate () {
-    # КОПИРОВАНИЕ КАСТОМНЫХ СЕРТИФИКАТОВ
     TLS_SECRET_NAME=$(sudo kubectl -n standalone get ingress learn-ingress -o jsonpath='{.spec.tls[0].secretName}')
     # проверить центр сертификации, который выдал текущий сертификат
     openssl x509 -in <(sudo kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
-      -issuer -noout \
-      | (grep -i 'CN = iSpring-IssuingCA' || echo "Custom certificate found.")
- 
+        -issuer -noout \
+        | (grep -i 'CN = iSpring-IssuingCA' || echo "Custom certificate найден.")
     # в случае кастомного сертификата сохранить сертификат в файл
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' \
-      | base64 -d \
-      | tee /root/standalone/.config/tls-cert.pem > /dev/null
- 
+        | base64 -d \
+        | tee /root/standalone/.config/tls-cert.pem > /dev/null
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.key}' \
-      | base64 -d \
-      | tee /root/standalone/.config/tls-key.pem > /dev/null
- 
-    # дополнить файл настроек путями до сертификатов
+        | base64 -d \
+        | tee /root/standalone/.config/tls-key.pem > /dev/null
+        echo "Custom certificate сохранен в файл."
+    # дополнить конфиг файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
-      | tee -a /root/standalone/.config/config
+          | tee -a /root/standalone/.config/config       
 } 
 
-# Копирование секретов smtp-сервера в случае K8S 1.19.15
+# Копирование секретов smtp-сервера в случае K8S 1.19 и выше
 function copy_secret_parameters_mail_smpt () {
     readonly K8S_VERSION_MAJOR=1
     readonly K8S_VERSION_MINOR=18
-    if [ $(kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
-        LEARN_APP_POD_NAME=$(kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
+    if [ $(sudo kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
+        LEARN_APP_POD_NAME=$(sudo kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
         LEARN_APP_SECRET_NAME=$(sudo kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name|test("learn-app-env-secret.*")?) | .secretRef.name')
         # из секрета получаем логин от smtp сервера
         MAIL_SMTP_USERNAME=$(sudo kubectl -n standalone get secret $LEARN_APP_SECRET_NAME -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_USERNAME}' | base64 -d)

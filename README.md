@@ -12,7 +12,7 @@ wget https://raw.githubusercontent.com/ispringtech/on-prem-learn-scripts/main/pr
 Разместить полученный файл в директорию /root/standalone
 
 3. Выполнение скрипта.
-Запустить скрипт "preparing_update_standalone.sh" командой: 
+Запустить скрипт "preparing_update_standalone.sh", передав путь к файлу "config": 
    ```
    ./preparing_update_standalone.sh /standalone/config
    ```
