@@ -23,8 +23,14 @@ if [[ -z "$1" ]]; then
 fi
 
 # Установка jq
-apt-get update 
-apt-get install jq
+function install_jq() {
+    if [[ -z "$(command -v jq)" ]]; then
+        echo "Программа jq не найдена"
+        apt-get update 
+        apt-get install jq
+        exit 1
+    fi
+}
 
 # Проверка наличия файла 'config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
 function check_config () {
@@ -124,8 +130,8 @@ main() {
     cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
         echo "Копирование конфигурационного файла в директорию root/standalone/.config выполнено."
 
+    install_jq
     check_custom_certificate
-
     copy_secret_parameters_mail_smpt
 }
 main $1
