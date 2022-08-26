@@ -22,18 +22,8 @@ if [[ -z "$1" ]]; then
     exit 1
 fi
 
-# Установка jq
-function install_jq() {
-    if [[ -z "$(command -v jq)" ]]; then
-        echo "Программа jq не найдена"
-        apt-get update 
-        apt-get install jq
-        exit 1
-    fi
-}
-
 # Проверка наличия файла 'config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
-function check_config () {
+function check_config() {
     if [[ -z "$BUILD_URL" ]]; then
         echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'config' $BUILD_URL"
         exit 1
@@ -45,7 +35,7 @@ function check_config () {
 }
 
 # Бэкап старой версии дистрибутива
-function standalone_backup () {
+function standalone_backup() {
     STANDALONE_BACKUP_DIR="/root/standalone-backup-$(date +%F)"
     if [ ! -d "$STANDALONE_BACKUP_DIR" ]; then
         mv ~/standalone "$STANDALONE_BACKUP_DIR"
@@ -56,7 +46,7 @@ function standalone_backup () {
 }
 
 # Проверка свободного пространства на master
-function free_space_on_master () {
+function free_space_on_master() {
     readonly CAPACITY_UPDATE=8
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
     if [ $FREE_SPACE \> $CAPACITY_UPDATE ]; then
@@ -70,8 +60,34 @@ function free_space_on_master () {
     fi
 }
 
+# Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию root/standalone
+function download_tar_distribute_config() {
+    cd /root
+    wget "$BUILD_URL" -O standalone.tar.gz
+        echo "Скачивание дистрибутива выполнено."
+    tar -xvhf standalone.tar.gz
+        echo "Распаковка дистрибутива выполнена."
+    wget "$CONFIG_URL" -O config.tar.gz
+        echo "Скачивание конфигурационного файла выполнено."
+    tar -xvhf config.tar.gz -C standalone
+        echo "Распаковка конфигурационного файла выполнена."
+    #Копирование файла config из старой папки с дистрибутивом в новый  
+    cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
+        echo "Копирование конфигурационного файла в директорию root/standalone/.config выполнено."
+}
+
+# Установка jq
+function install_jq() {
+    if [[ -z "$(command -v jq)" ]]; then
+        echo "Программа jq не найдена"
+        apt-get update 
+        apt-get install jq
+        exit 1
+    fi
+}
+
 # Проверка кастомных сертификатов
-function check_custom_certificate () {
+function check_custom_certificate() {
     TLS_SECRET_NAME=$(sudo kubectl -n standalone get ingress learn-ingress -o jsonpath='{.spec.tls[0].secretName}')
     # проверить центр сертификации, который выдал текущий сертификат
     openssl x509 -in <(sudo kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
@@ -87,11 +103,11 @@ function check_custom_certificate () {
         echo "Custom certificate сохранен в файл."
     # дополнить конфиг файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
-          | tee -a /root/standalone/.config/config       
-} 
+          | tee -a /root/standalone/.config/config
+}
 
 # Копирование секретов smtp-сервера в случае K8S 1.19 и выше
-function copy_secret_parameters_mail_smpt () {
+function copy_secret_parameters_mail_smpt() {
     readonly K8S_VERSION_MAJOR=1
     readonly K8S_VERSION_MINOR=18
     if [ $(sudo kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
@@ -104,39 +120,23 @@ function copy_secret_parameters_mail_smpt () {
         # дополняем файл настроек с кредами к почтовику
         printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
           | tee -a ~/standalone/.config/config
-    fi 
+    fi
 }
 
 main() {
     CONFIG=$1
     source "$CONFIG"
-
     check_config
     standalone_backup
     free_space_on_master
-
-    # Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию root/standalone
-    cd /root
-    wget "$BUILD_URL" -O standalone.tar.gz
-        echo "Скачивание дистрибутива выполнено."
-    tar -xvhf standalone.tar.gz
-        echo "Распаковка дистрибутива выполнена."
-    wget "$CONFIG_URL" -O config.tar.gz
-        echo "Скачивание конфигурационного файла выполнено."
-    tar -xvhf config.tar.gz -C standalone
-        echo "Распаковка конфигурационного файла выполнена."
-
-    #Копирование файла config из старой папки с дистрибутивом в новый  
-    cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
-        echo "Копирование конфигурационного файла в директорию root/standalone/.config выполнено."
-
+    download_tar_distribute_config
     install_jq
     check_custom_certificate
     copy_secret_parameters_mail_smpt
 }
+
 main $1
 
-# Сообщение после функции main
 echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
 echo "Для запуска обновления выполните следующие шаги:
 1. Выполните команду screen
