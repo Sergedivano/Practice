@@ -5,18 +5,18 @@ set -o errexit
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
 if [ "$UID" != "$ROOT_UID" ]; then
-  echo "У вас недостаточно прав для запуска этого скрипта. Для продолжения необходимы права root или использовать sudo su"
+  echo "У вас недостаточно прав для запуска этого скрипта. Для продолжения авторизоваться с правами root или использовать sudo su."
   exit 1
 fi
 
 # Проверка установленного standalone
 if [ $(kubectl get namespaces | grep standalone | wc -l) -lt 1 ] ; then
-  echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru"
+  echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru."
   exit 1
 fi
 
 if [[ -z "$1" ]]; then
-  echo "Необходимо передать путь к файлу 'config'"
+  echo "Необходимо передать путь к файлу 'config'."
   echo "Пример команды для запуска скрипта подготовки к обновлению:
         ./preparing_update_standalone.sh /standalone/config"
   exit 1
@@ -29,11 +29,11 @@ apt-get install jq
 # Проверка наличия файла 'config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
 function check_config () {
     if [[ -z "$BUILD_URL" ]]; then
-      echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'config'. $BUILD_URL"
+      echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'config' $BUILD_URL"
       exit 1
     fi
     if [[ -z "$CONFIG_URL" ]]; then
-      echo "Скрипт ожидает URL-ссылку на конфигурационный файл 'config'. $CONFIG_URL"
+      echo "Скрипт ожидает URL-ссылку на конфигурационный файл 'config' $CONFIG_URL"
       exit 1
     fi
 }
@@ -53,8 +53,8 @@ function standalone_backup () {
 function free_space_on_master () {
     readonly CAPACITY_UPDATE=8
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
-    if [ $FREE_SPACE \< $CAPACITY_UPDATE ]; then
-        echo "Для обновления требуется не менее 8G свободного дискового пространства."
+    if [ $FREE_SPACE \> $CAPACITY_UPDATE ]; then
+        echo "Для обновления требуется не менее 8 G свободного дискового пространства."
         echo "Cейчас доступно $FREE_SPACE G. Продолжить подготовку к обновлению? (yes/no)"
         read -r confirmation
         if [ "$confirmation" == 'no' ]; then
@@ -71,7 +71,7 @@ function check_custom_certificate () {
     # проверить центр сертификации, который выдал текущий сертификат
     openssl x509 -in <(sudo kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
       -issuer -noout \
-      | (grep -i 'CN = iSpring-IssuingCA' || echo "Custom certificate found")
+      | (grep -i 'CN = iSpring-IssuingCA' || echo "Custom certificate found.")
  
     # в случае кастомного сертификата сохранить сертификат в файл
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' \
@@ -90,8 +90,8 @@ function check_custom_certificate () {
 # Копирование секретов smtp-сервера в случае K8S 1.19.15
 function copy_secret_parameters_mail_smpt () {
     readonly K8S_VERSION_MAJOR=1
-    readonly K8S_VERSION_MINOR=19
-    if [ $(kubectl version -o json | jq '.serverVersion.major') -ge $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') -ge $K8S_VERSION_MINOR ]; then
+    readonly K8S_VERSION_MINOR=18
+    if [ $(kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
         LEARN_APP_POD_NAME=$(kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
         LEARN_APP_SECRET_NAME=$(sudo kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name|test("learn-app-env-secret.*")?) | .secretRef.name')
         # из секрета получаем логин от smtp сервера
@@ -115,12 +115,17 @@ main() {
     # Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию root/standalone
     cd /root
     wget "$BUILD_URL" -O standalone.tar.gz
+        echo "Скачивание дистрибутива выполнено."
     tar -xvhf standalone.tar.gz
+        echo "Распаковка дистрибутива выполнена."
     wget "$CONFIG_URL" -O config.tar.gz
+        echo "Скачивание конфигурационного файла выполнено."
     tar -xvhf config.tar.gz -C standalone
+        echo "Распаковка конфигурационного файла выполнена."
 
     #Копирование файла config из старой папки с дистрибутивом в новый  
     cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
+        echo "Копирование конфигурационного файла в директорию root/standalone/.config выполнено."
 
     check_custom_certificate
 
