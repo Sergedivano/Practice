@@ -38,10 +38,10 @@ function check_config() {
 function standalone_backup() {
     STANDALONE_BACKUP_DIR="/root/standalone-backup-$(date +%F)"
     if [ ! -d "$STANDALONE_BACKUP_DIR" ]; then
-        mv ~/standalone "$STANDALONE_BACKUP_DIR"
-        echo "Backup директории root/standalone выполнен."
+        mv /root/standalone "$STANDALONE_BACKUP_DIR"
+        echo "Backup директории /root/standalone выполнен."
     else
-        echo "Backup директории root/standalone был выполнен ранее."
+        echo "Backup директории /root/standalone был выполнен ранее."
     fi
 }
 
@@ -60,7 +60,7 @@ function free_space_on_master() {
     fi
 }
 
-# Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию root/standalone
+# Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию /root/standalone
 function download_tar_distribute_config() {
     cd /root
     wget "$BUILD_URL" -O standalone.tar.gz
@@ -72,9 +72,15 @@ function download_tar_distribute_config() {
     tar -xvhf config.tar.gz -C standalone
         echo "Распаковка конфигурационного файла выполнена."
     #Копирование файла config из старой папки с дистрибутивом в новый  
-    cp ~/standalone-backup-$(date +%F)/.config/config ~/standalone/.config/config
-        echo "Копирование конфигурационного файла в директорию root/standalone/.config выполнено."
+    cp /root/standalone-backup-$(date +%F)/.config/config /root/standalone/.config/config
+        echo "Копирование конфигурационного файла в директорию /root/standalone/.config выполнено." 
 }
+
+# Копирование файлов installkey.pem, installkey.pem.pub из старой папки с дистрибутивом в новый 
+function copy_installkey() {
+    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem /root/standalone/.config/installkey.pem
+    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem.pub /root/standalone/.config/installkey.pem.pub  
+}     
 
 # Установка jq
 function install_jq() {
@@ -88,9 +94,9 @@ function install_jq() {
 
 # Проверка кастомных сертификатов
 function check_custom_certificate() {
-    TLS_SECRET_NAME=$(sudo kubectl -n standalone get ingress learn-ingress -o jsonpath='{.spec.tls[0].secretName}')
+    TLS_SECRET_NAME=$(kubectl -n standalone get ingress learn-ingress -o jsonpath='{.spec.tls[0].secretName}')
     # проверить центр сертификации, который выдал текущий сертификат
-    openssl x509 -in <(sudo kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
+    openssl x509 -in <(kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
         -issuer -noout \
         | (grep -i 'CN = iSpring-IssuingCA' || echo "Custom certificate найден.")
     # в случае кастомного сертификата сохранить сертификат в файл
@@ -110,13 +116,13 @@ function check_custom_certificate() {
 function copy_secret_parameters_mail_smpt() {
     readonly K8S_VERSION_MAJOR=1
     readonly K8S_VERSION_MINOR=18
-    if [ $(sudo kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
-        LEARN_APP_POD_NAME=$(sudo kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
-        LEARN_APP_SECRET_NAME=$(sudo kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name|test("learn-app-env-secret.*")?) | .secretRef.name')
+    if [ $(kubectl version -o json | jq '.serverVersion.major') == $K8S_VERSION_MAJOR ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> $K8S_VERSION_MINOR ]; then
+        LEARN_APP_POD_NAME=$(kubectl -n "standalone" get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath="{.items[0].metadata.name}")
+        LEARN_APP_SECRET_NAME=$(kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name|test("learn-app-env-secret.*")?) | .secretRef.name')
         # из секрета получаем логин от smtp сервера
-        MAIL_SMTP_USERNAME=$(sudo kubectl -n standalone get secret $LEARN_APP_SECRET_NAME -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_USERNAME}' | base64 -d)
+        MAIL_SMTP_USERNAME=$(kubectl -n standalone get secret $LEARN_APP_SECRET_NAME -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_USERNAME}' | base64 -d)
         # из секрета получаем пароль от smtp сервера 
-        MAIL_SMTP_PASSWORD=$(sudo kubectl -n standalone get secret $LEARN_APP_SECRET_NAME -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
+        MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret $LEARN_APP_SECRET_NAME -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
         # дополняем файл настроек с кредами к почтовику
         printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
           | tee -a ~/standalone/.config/config
@@ -130,15 +136,16 @@ main() {
     standalone_backup
     free_space_on_master
     download_tar_distribute_config
+    copy_installkey
     install_jq
     check_custom_certificate
     copy_secret_parameters_mail_smpt
+
+    echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
+    echo "Для запуска обновления выполните следующие шаги:
+    1. Выполните команду screen
+    2. В screen-сессий выполните cd /root/standalone
+    3. Запустите скрипт установщика install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
 main $1
-
-echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
-echo "Для запуска обновления выполните следующие шаги:
-1. Выполните команду screen
-2. В screen-сессий выполните cd /root/standalone
-3. Запустите скрипт установщика install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
