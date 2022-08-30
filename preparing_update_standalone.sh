@@ -18,7 +18,7 @@ fi
 if [[ -z "$1" ]]; then
     echo "Необходимо передать путь к файлу 'preparing_config'."
     echo "Пример команды для запуска скрипта подготовки к обновлению:
-          ./preparing_update_standalone.sh /root/standalone/preparing_config"
+          ./preparing_update_standalone.sh /root/preparing_config"
     exit 1
 fi
 
