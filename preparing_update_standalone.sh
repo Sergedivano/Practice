@@ -25,11 +25,11 @@ fi
 # Проверка наличия файла 'preparing_config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
 function check_preparing_config() {
     if [[ -z "$BUILD_URL" ]]; then
-        echo "Скрипт ожидает URL-ссылку на дистрибутив в файле 'preparing_config' в строке BUILD_URL="
+        echo "Скрипт ожидает URL-ссылку на дистрибутив в 'preparing_config' в строке BUILD_URL="
         exit 1
     fi
     if [[ -z "$CONFIG_URL" ]]; then
-        echo "Скрипт ожидает URL-ссылку на конфигурационный файл 'preparing_config' в строке CONFIG_URL="
+        echo "Скрипт ожидает URL-ссылку на конфигурационный файл в 'preparing_config' в строке CONFIG_URL="
         exit 1
     fi
 }
@@ -76,7 +76,7 @@ function download_tar_distribute_config() {
         echo "Копирование конфигурационного файла в директорию /root/standalone/.config выполнено." 
 }
 
-# Копирование файлов installkey.pem, installkey.pem.pub из старой папки с дистрибутивом в новый 
+# Копирование файлов installer.pem, installer.pem.pub из старой папки с дистрибутивом в новый 
 function copy_installer() {
     cd /root
     cp /root/standalone-backup-$(date +%F)/.config/installer.pem /root/standalone/.config/installer.pem
@@ -86,10 +86,10 @@ function copy_installer() {
 # Установка jq
 function install_jq() {
     if [[ -z "$(command -v jq)" ]]; then
-        echo "Программа jq не найдена"
+        echo "Программа 'jq' не найдена. Будет выполнена установка 'jq'."
         apt update
-        apt install jq
-        exit 1
+        apt install -y jq
+        echo "Установка 'jq' выполнена."
     fi
 }
 
@@ -108,7 +108,7 @@ function check_custom_certificate() {
         | base64 -d \
         | tee /root/standalone/.config/tls-key.pem > /dev/null
         echo "Custom certificate сохранен в файл."
-    # дополнить конфиг файл путями до сертификатов
+    # дополнить конфиг-файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
           | tee -a /root/standalone/.config/config
 }
@@ -146,7 +146,7 @@ main() {
     echo "Для запуска обновления выполните следующие шаги:
     1. Выполните команду screen
     2. В screen-сессий выполните cd /root/standalone
-    3. Запустите скрипт установщика install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
+    3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
 main $1
