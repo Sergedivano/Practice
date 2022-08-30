@@ -60,7 +60,7 @@ function check_freespace_on_master() {
     fi
 }
 
-# Скачивание и распаковка дистрибутива и слоя совместимости с копированием с директорию /root/standalone
+# Скачивание и распаковка дистрибутива и слоя совместимости с копированием в директорию /root/standalone
 function download_tar_distribute_config() {
     cd /root
     wget "$BUILD_URL" -O standalone.tar.gz
