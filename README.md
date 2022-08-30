@@ -8,11 +8,11 @@
 ```
 wget https://raw.githubusercontent.com/ispringtech/on-prem-learn-scripts/main/preparing_update_standalone.sh -O preparing_update_standalone.sh; chmod +x preparing_update_standalone.sh
 ```
-2. Получить от инженера iSpring файл "config", содержащий уникальные URL-ссылки на дистрибутив и конфигурационный файл.
+2. Получить от инженера iSpring файл "preparing_config", содержащий уникальные URL-ссылки на дистрибутив и конфигурационный файл.
 Разместить полученный файл в директорию /root/standalone
 
 3. Выполнение скрипта.
-Запустить скрипт "preparing_update_standalone.sh", передав путь к файлу "config": 
+Запустить скрипт "preparing_update_standalone.sh", передав путь к файлу "preparing_config": 
    ```
-   ./preparing_update_standalone.sh /standalone/config
+   ./preparing_update_standalone.sh /root/standalone/preparing_config
    ```
