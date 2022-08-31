@@ -18,7 +18,7 @@ fi
 if [[ -z "$1" ]]; then
     echo "Необходимо передать путь к файлу 'preparing_config'."
     echo "Пример команды для запуска скрипта подготовки к обновлению:
-          ./preparing_update_standalone.sh /root/preparing_config"
+    ./preparing_update_standalone.sh /root/preparing_config"
     exit 1
 fi
 
@@ -76,19 +76,20 @@ function download_tar_distribute_config() {
         echo "Копирование конфигурационного файла в директорию /root/standalone/.config выполнено." 
 }
 
-# Копирование файлов installer.pem, installer.pem.pub из старой папки с дистрибутивом в новый 
-function copy_installer() {
+# Копирование файлов installer/installkey.pem, installer/installkey.pem.pub из старой папки с дистрибутивом в новый 
+function copy_installer/installkey() {
     cd /root
     cp /root/standalone-backup-$(date +%F)/.config/installer.pem /root/standalone/.config/installer.pem
-    #cp /root/standalone-backup-$(date +%F)/.config/installer.pem.pub /root/standalone/.config/installer.pem.pub
+    cp /root/standalone-backup-$(date +%F)/.config/installer.pem.pub /root/standalone/.config/installer.pem.pub
+    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem /root/standalone/.config/installkey.pem
+    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem.pub /root/standalone/.config/installkey.pem.pub
 }
 
 # Установка jq
 function install_jq() {
     if [[ -z "$(command -v jq)" ]]; then
         echo "Программа 'jq' не найдена. Будет выполнена установка 'jq'."
-        apt update
-        apt install -y jq
+        apt update && apt install -y jq
         echo "Установка 'jq' выполнена."
     fi
 }
@@ -107,10 +108,10 @@ function check_custom_certificate() {
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.key}' \
         | base64 -d \
         | tee /root/standalone/.config/tls-key.pem > /dev/null
-        echo "Custom certificate сохранен в файл."
     # дополнить конфиг-файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
-          | tee -a /root/standalone/.config/config
+        | tee -a /root/standalone/.config/config > /dev/null
+        echo "Информация о Custom certificate сохранена в файл /root/standalone/.config/config."
 }
 
 # Копирование секретов smtp-сервера в случае K8S 1.19 и выше
@@ -126,7 +127,7 @@ function copy_secret_parameters_mail_smpt() {
         MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
         # дополняем файл настроек с кредами к почтовику
         printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
-          | tee -a /root/standalone/.config/config
+            | tee -a /root/standalone/.config/config > /dev/null
     fi
 }
 
@@ -137,7 +138,7 @@ main() {
     standalone_backup
     check_freespace_on_master
     download_tar_distribute_config
-    copy_installer
+    copy_installer/installkey
     install_jq
     check_custom_certificate
     copy_secret_parameters_mail_smpt
