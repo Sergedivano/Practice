@@ -132,7 +132,7 @@ function copy_secret_parameters_mail_smpt() {
 }
 
 main() {
-    PREPARING_CONFIG="$1"
+    PREPARING_CONFIG=$1
     source "$PREPARING_CONFIG"
     check_preparing_config
     standalone_backup
@@ -150,4 +150,4 @@ main() {
     3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
-main "$1"
+main $1
