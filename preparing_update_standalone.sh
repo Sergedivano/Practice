@@ -10,7 +10,7 @@ if [ "$UID" != "$ROOT_UID" ]; then
 fi
 
 # Проверка установленного standalone
-if [ $(kubectl get namespaces | grep standalone | wc -l) -lt 1 ] ; then
+if [ $(kubectl get namespaces | grep -c -i standalone) != 1 ] ; then
     echo "Серверная версии СДО iSpring Learn не найдена. Обратитесь в iSpring Support support@ispring.ru."
     exit 1
 fi
@@ -51,7 +51,7 @@ function check_freespace_on_master() {
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
     if [ "$FREE_SPACE" \> "$CAPACITY_UPDATE" ]; then
         echo "Для обновления требуется не менее 8 G свободного дискового пространства."
-        echo "Cейчас доступно "$FREE_SPACE" G. Продолжить подготовку к обновлению? (yes/no)"
+        echo "Cейчас доступно $FREE_SPACE G. Продолжить подготовку к обновлению? (yes/no)"
         read -r confirmation
         if [ "$confirmation" == 'no' ]; then
             echo "Подготовка к обновлению отменена."
@@ -132,7 +132,7 @@ function copy_secret_parameters_mail_smpt() {
 }
 
 main() {
-    PREPARING_CONFIG=$1
+    PREPARING_CONFIG="$1"
     source "$PREPARING_CONFIG"
     check_preparing_config
     standalone_backup
@@ -150,4 +150,4 @@ main() {
     3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
-main $1
+main "$1"
