@@ -76,13 +76,45 @@ function download_tar_distribute_config() {
         echo "Копирование конфигурационного файла в директорию /root/standalone/.config выполнено." 
 }
 
-# Копирование файлов installer/installkey.pem, installer/installkey.pem.pub из старой папки с дистрибутивом в новый 
-function copy_installer/installkey() {
+# Копирование файлов installer.pem, installer.pem.pub из старой папки с дистрибутивом в новый 
+function copy_installer() {
     cd /root
-    cp /root/standalone-backup-$(date +%F)/.config/installer.pem /root/standalone/.config/installer.pem
-    cp /root/standalone-backup-$(date +%F)/.config/installer.pem.pub /root/standalone/.config/installer.pem.pub
-    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem /root/standalone/.config/installkey.pem
-    cp /root/standalone-backup-$(date +%F)/.config/installkey.pem.pub /root/standalone/.config/installkey.pem.pub
+    INSTALLER_PEM=/root/standalone-backup-$(date +%F)/.config/installer.pem
+    INSTALLER_PEM_PUB=/root/standalone-backup-$(date +%F)/.config/installer.pem.pub
+    
+    if [[ -f "$INSTALLER_PEM" ]]; then
+        echo "$INSTALLER_PEM найден. Будет выполнено копирование."
+        cp /root/standalone-backup-$(date +%F)/.config/installer.pem /root/standalone/.config/installer.pem
+    else
+       exit 1
+    fi   
+
+    if [[ -f "$INSTALLER_PEM_PUB" ]]; then
+        echo "$INSTALLER_PEM_PUB найден. Будет выполнено копирование."
+        cp /root/standalone-backup-$(date +%F)/.config/installer.pem.pub /root/standalone/.config/installer.pem.pub
+    else
+        exit 1
+    fi   
+}
+
+# Копирование файлов installkey.pem, installkey.pem.pub из старой папки с дистрибутивом в новый
+function copy_installkey() { 
+    cd /root
+    INSTALLKEY_PEM=/root/standalone-backup-$(date +%F)/.config/installkey.pem
+    INSTALLKEY_PEM_PUB=/root/standalone-backup-$(date +%F)/.config/installkey.pem.pub
+    if [[ -f "$INSTALLKEY_PEM" ]]; then
+        echo "$INSTALLKEY_PEM найден. Будет выполнено копирование."
+        cp /root/standalone-backup-$(date +%F)/.config/installkey.pem /root/standalone/.config/installkey.pem
+    else
+       exit 1
+    fi   
+
+    if [[ -f "$INSTALLKEY_PEM_PUB" ]]; then
+        echo "$INSTALLKEY_PEM_PUB найден. Будет выполнено копирование."
+        cp /root/standalone-backup-$(date +%F)/.config/installkey.pem.pub /root/standalone/.config/installkey.pem.pub
+    else
+        exit 1
+    fi   
 }
 
 # Установка jq
@@ -138,7 +170,8 @@ main() {
     standalone_backup
     check_freespace_on_master
     download_tar_distribute_config
-    copy_installer/installkey
+    copy_installer
+    copy_installkey
     install_jq
     check_custom_certificate
     copy_secret_parameters_mail_smpt
