@@ -2,6 +2,10 @@
 
 set -o errexit
 
+readonly MAINPATH=/root/standalone
+readonly MAINPATH_CONFIG="$MAINPATH"/.config
+readonly MAINPATH_BACKUP="$MAINPATH"-backup-$(date +%F)
+
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
 if [ "$UID" != "$ROOT_UID" ]; then
@@ -38,10 +42,10 @@ function check_preparing_config() {
 function standalone_backup() {
     STANDALONE_BACKUP_DIR="/root/standalone-backup-$(date +%F)"
     if [ ! -d "$STANDALONE_BACKUP_DIR" ]; then
-        mv /root/standalone "$STANDALONE_BACKUP_DIR"
-        echo "Backup директории /root/standalone выполнен."
+        mv "$MAINPATH" "$STANDALONE_BACKUP_DIR"
+        echo "Backup директории $MAINPATH выполнен."
     else
-        echo "Backup директории /root/standalone был выполнен ранее."
+        echo "Backup директории $MAINPATH был выполнен ранее."
     fi
 }
 
@@ -72,49 +76,50 @@ function download_tar_distribute_config() {
     tar -xvhf config.tar.gz -C standalone
         echo "Распаковка конфигурационного файла выполнена."
     #Копирование файла config из старой папки с дистрибутивом в новый  
-    cp /root/standalone-backup-$(date +%F)/.config/config /root/standalone/.config/config
-        echo "Копирование конфигурационного файла в директорию /root/standalone/.config выполнено." 
+    cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
+        echo "Копирование конфигурационного файла в директорию $MAINPATH_CONFIG выполнено." 
 }
 
 # Копирование файлов installer.pem, installer.pem.pub из старой папки с дистрибутивом в новый 
 function copy_installer() {
     cd /root
-    INSTALLER_PEM=/root/standalone-backup-$(date +%F)/.config/installer.pem
-    INSTALLER_PEM_PUB=/root/standalone-backup-$(date +%F)/.config/installer.pem.pub
-    
-    if [[ -f "$INSTALLER_PEM" ]]; then
+    #SEARCHER_INSTALLER="$MAINPATH_BACKUP"/.config/install*.pem*
+    INSTALLER_PEM="$MAINPATH_BACKUP"/.config/installer.pem
+    INSTALLER_PEM_PUB="$MAINPATH_BACKUP"/.config/installer.pem.pub
+    #if [[ -z "$SEARCHER_INSTALLER" ]]; then
+    if [[ ! -f "$INSTALLER_PEM" ]]; then
+        return
+    fi        
         echo "$INSTALLER_PEM найден. Будет выполнено копирование."
-        cp /root/standalone-backup-$(date +%F)/.config/installer.pem /root/standalone/.config/installer.pem
-    else
-       exit 1
-    fi   
+        cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem
+        echo "Копирование выполнено"
 
-    if [[ -f "$INSTALLER_PEM_PUB" ]]; then
+    if [[ ! -f "$INSTALLER_PEM_PUB" ]]; then
+        return
+    fi    
         echo "$INSTALLER_PEM_PUB найден. Будет выполнено копирование."
-        cp /root/standalone-backup-$(date +%F)/.config/installer.pem.pub /root/standalone/.config/installer.pem.pub
-    else
-        exit 1
-    fi   
+        cp "$MAINPATH_BACKUP"/.config/installer.pem.pub "$MAINPATH_CONFIG"/installer.pem.pub   
+        echo "Копирование выполнено"  
 }
 
 # Копирование файлов installkey.pem, installkey.pem.pub из старой папки с дистрибутивом в новый
 function copy_installkey() { 
     cd /root
-    INSTALLKEY_PEM=/root/standalone-backup-$(date +%F)/.config/installkey.pem
-    INSTALLKEY_PEM_PUB=/root/standalone-backup-$(date +%F)/.config/installkey.pem.pub
-    if [[ -f "$INSTALLKEY_PEM" ]]; then
+    INSTALLKEY_PEM="$MAINPATH_BACKUP"/.config/installkey.pem
+    INSTALLKEY_PEM_PUB="$MAINPATH_BACKUP"/.config/installkey.pem.pub
+    if [[ ! -f "$INSTALLKEY_PEM" ]]; then
+         return
+    fi
         echo "$INSTALLKEY_PEM найден. Будет выполнено копирование."
-        cp /root/standalone-backup-$(date +%F)/.config/installkey.pem /root/standalone/.config/installkey.pem
-    else
-       exit 1
-    fi   
+        cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem
+        echo "Копирование выполнено"
 
-    if [[ -f "$INSTALLKEY_PEM_PUB" ]]; then
+    if [[ ! -f "$INSTALLKEY_PEM_PUB" ]]; then
+         return
+    fi
         echo "$INSTALLKEY_PEM_PUB найден. Будет выполнено копирование."
-        cp /root/standalone-backup-$(date +%F)/.config/installkey.pem.pub /root/standalone/.config/installkey.pem.pub
-    else
-        exit 1
-    fi   
+        cp "$MAINPATH_BACKUP"/.config/installkey.pem.pub "$MAINPATH_CONFIG"/installkey.pem.pub
+        echo "Копирование выполнено"
 }
 
 # Установка jq
@@ -127,7 +132,7 @@ function install_jq() {
 }
 
 # Проверка кастомных сертификатов
-function check_custom_certificate() {
+function try_get_custom_certificate() {
     TLS_SECRET_NAME=$(kubectl -n standalone get ingress learn-ingress -o jsonpath='{.spec.tls[0].secretName}')
     # проверить центр сертификации, который выдал текущий сертификат
     openssl x509 -in <(kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' | base64 -d) \
@@ -136,31 +141,42 @@ function check_custom_certificate() {
     # в случае кастомного сертификата сохранить сертификат в файл
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' \
         | base64 -d \
-        | tee /root/standalone/.config/tls-cert.pem > /dev/null
+        | tee "$MAINPATH_CONFIG"/tls-cert.pem > /dev/null
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.key}' \
         | base64 -d \
-        | tee /root/standalone/.config/tls-key.pem > /dev/null
+        | tee "$MAINPATH_CONFIG"/tls-key.pem > /dev/null
     # дополнить конфиг-файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
-        | tee -a /root/standalone/.config/config > /dev/null
-        echo "Информация о Custom certificate сохранена в файл /root/standalone/.config/config."
+        | tee -a "$MAINPATH_CONFIG"/config
+        echo "Информация о Custom certificate сохранена в файл $MAINPATH_CONFIG/config"
 }
 
 # Копирование секретов smtp-сервера в случае K8S 1.19 и выше
-function copy_secret_parameters_mail_smpt() {
+function try_get_mail_smpt_parameters() {
     readonly K8S_VERSION_MAJOR=1
-    readonly K8S_VERSION_MINOR=18
-    if [ $(kubectl version -o json | jq '.serverVersion.major') == "$K8S_VERSION_MAJOR" ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \> "$K8S_VERSION_MINOR" ]; then
-        LEARN_APP_POD_NAME=$(kubectl -n standalone get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath='{.items[0].metadata.name}')
-        LEARN_APP_SECRET_NAME=$(kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name | test("learn-app-env-secret.*")?) | .secretRef.name')
-        # из секрета получаем логин от smtp сервера
-        MAIL_SMTP_USERNAME=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_USERNAME}' | base64 -d)
-        # из секрета получаем пароль от smtp сервера 
-        MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
-        # дополняем файл настроек с кредами к почтовику
-        printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
-            | tee -a /root/standalone/.config/config > /dev/null
-    fi
+    readonly K8S_VERSION_MINOR=19
+    if [ $(kubectl version -o json | jq '.serverVersion.major') != "$K8S_VERSION_MAJOR" ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \< "$K8S_VERSION_MINOR" ]; then
+        return
+    fi    
+    LEARN_APP_POD_NAME=$(kubectl -n standalone get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath='{.items[0].metadata.name}')
+    LEARN_APP_SECRET_NAME=$(kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name | test("learn-app-env-secret.*")?) | .secretRef.name')
+    # из секрета получаем логин от smtp сервера
+    MAIL_SMTP_USERNAME=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_USERNAME}' | base64 -d)
+    # из секрета получаем пароль от smtp сервера 
+    MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
+    # дополняем файл настроек с кредами к почтовику
+    printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
+        | tee -a "$MAINPATH_CONFIG"/config > /dev/null
+    echo "Учетные данные smtp-сервера сохранены в файл $MAINPATH_CONFIG/config"    
+}
+
+# Сообщения, после подготовки к обновлению
+function messages_after_preparing() {
+        echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
+        echo "Для запуска обновления выполните следующие шаги:
+        1. Выполните команду screen
+        2. В screen-сессий выполните cd $MAINPATH
+        3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
 main() {
@@ -173,14 +189,9 @@ main() {
     copy_installer
     copy_installkey
     install_jq
-    check_custom_certificate
-    copy_secret_parameters_mail_smpt
-
-    echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
-    echo "Для запуска обновления выполните следующие шаги:
-    1. Выполните команду screen
-    2. В screen-сессий выполните cd /root/standalone
-    3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
+    try_get_custom_certificate
+    try_get_mail_smpt_parameters
+    messages_after_preparing
 }
 
 main $1
