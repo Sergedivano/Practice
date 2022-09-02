@@ -2,9 +2,9 @@
 
 set -o errexit
 
-readonly MAINPATH=/root/standalone
-readonly MAINPATH_CONFIG="$MAINPATH"/.config
-readonly MAINPATH_BACKUP="$MAINPATH"-backup-$(date +%F)
+readonly MAINPATH="/root/standalone"
+readonly MAINPATH_CONFIG=""$MAINPATH"/.config"
+readonly MAINPATH_BACKUP=""$MAINPATH"-backup-$(date +%F)"
 
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
@@ -40,9 +40,8 @@ function check_preparing_config() {
 
 # Бэкап старой версии дистрибутива
 function standalone_backup() {
-    STANDALONE_BACKUP_DIR="/root/standalone-backup-$(date +%F)"
-    if [ ! -d "$STANDALONE_BACKUP_DIR" ]; then
-        mv "$MAINPATH" "$STANDALONE_BACKUP_DIR"
+    if [ ! -d "$MAINPATH_BACKUP" ]; then
+        mv "$MAINPATH" "$MAINPATH_BACKUP"
         echo "Backup директории $MAINPATH выполнен."
     else
         echo "Backup директории $MAINPATH был выполнен ранее."
@@ -64,8 +63,8 @@ function check_freespace_on_master() {
     fi
 }
 
-# Скачивание и распаковка дистрибутива и слоя совместимости с копированием в директорию /root/standalone
-function download_tar_distribute_config() {
+# Скачивание и распаковка дистрибутива и слоя совместимости
+function download_tar_distribution_config() {
     cd /root
     wget "$BUILD_URL" -O standalone.tar.gz
         echo "Скачивание дистрибутива выполнено."
@@ -75,51 +74,36 @@ function download_tar_distribute_config() {
         echo "Скачивание конфигурационного файла выполнено."
     tar -xvhf config.tar.gz -C standalone
         echo "Распаковка конфигурационного файла выполнена."
-    #Копирование файла config из старой папки с дистрибутивом в новый  
-    cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
+}
+
+#Копирование файла config из backup с дистрибутивом в новый 
+function copy_config() {
+    cd /root
+    SEARCHER_CONFIG=""$MAINPATH_BACKUP"/.config/config"
+    if [[ -z "$SEARCHER_CONFIG" ]]; then
+        echo "Конфигурационный файл $MAINPATH_BACKUP не найден."
+        exit 1
+    else 
+        cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
         echo "Копирование конфигурационного файла в директорию $MAINPATH_CONFIG выполнено." 
 }
 
-# Копирование файлов installer.pem, installer.pem.pub из старой папки с дистрибутивом в новый 
-function copy_installer() {
+# Копирование файлов install*.pem* из backup с дистрибутивом в новый 
+function copy_install*() {
     cd /root
-    #SEARCHER_INSTALLER="$MAINPATH_BACKUP"/.config/install*.pem*
-    INSTALLER_PEM="$MAINPATH_BACKUP"/.config/installer.pem
-    INSTALLER_PEM_PUB="$MAINPATH_BACKUP"/.config/installer.pem.pub
-    #if [[ -z "$SEARCHER_INSTALLER" ]]; then
-    if [[ ! -f "$INSTALLER_PEM" ]]; then
-        return
-    fi        
-        echo "$INSTALLER_PEM найден. Будет выполнено копирование."
-        cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem
-        echo "Копирование выполнено"
-
-    if [[ ! -f "$INSTALLER_PEM_PUB" ]]; then
-        return
-    fi    
-        echo "$INSTALLER_PEM_PUB найден. Будет выполнено копирование."
-        cp "$MAINPATH_BACKUP"/.config/installer.pem.pub "$MAINPATH_CONFIG"/installer.pem.pub   
-        echo "Копирование выполнено"  
-}
-
-# Копирование файлов installkey.pem, installkey.pem.pub из старой папки с дистрибутивом в новый
-function copy_installkey() { 
-    cd /root
-    INSTALLKEY_PEM="$MAINPATH_BACKUP"/.config/installkey.pem
-    INSTALLKEY_PEM_PUB="$MAINPATH_BACKUP"/.config/installkey.pem.pub
-    if [[ ! -f "$INSTALLKEY_PEM" ]]; then
-         return
-    fi
-        echo "$INSTALLKEY_PEM найден. Будет выполнено копирование."
-        cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem
-        echo "Копирование выполнено"
-
-    if [[ ! -f "$INSTALLKEY_PEM_PUB" ]]; then
-         return
-    fi
-        echo "$INSTALLKEY_PEM_PUB найден. Будет выполнено копирование."
-        cp "$MAINPATH_BACKUP"/.config/installkey.pem.pub "$MAINPATH_CONFIG"/installkey.pem.pub
-        echo "Копирование выполнено"
+    SEARCHER_INSTALL_PEM=""$MAINPATH_BACKUP"/.config/install*.pem"
+    SEARCHER_INSTALL_PEMPUB=""$MAINPATH_BACKUP"/.config/install*.pem.pub"
+    if [[ ! -z "$SEARCHER_INSTALL_PEM" ]] || [[ ! -z "$SEARCHER_INSTALL_PEMPUB" ]]; then   
+        echo "$SEARCHER_INSTALL_PEM и $SEARCHER_INSTALL_PEMPUB найден. Будет выполнено копирование."
+            cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem   
+            cp "$MAINPATH_BACKUP"/.config/installer.pem.pub "$MAINPATH_CONFIG"/installer.pem.pub
+            cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem     
+            cp "$MAINPATH_BACKUP"/.config/installkey.pem.pub "$MAINPATH_CONFIG"/installkey.pem.pub 
+        echo "Копирование выполнено" 
+    else
+        echo "$SEARCHER_INSTALL_PEM и $SEARCHER_INSTALL_PEMPUB не найден."
+        exit 1
+    fi     
 }
 
 # Установка jq
@@ -185,9 +169,9 @@ main() {
     check_preparing_config
     standalone_backup
     check_freespace_on_master
-    download_tar_distribute_config
-    copy_installer
-    copy_installkey
+    download_tar_distribution_config
+    copy_config
+    copy_install*
     install_jq
     try_get_custom_certificate
     try_get_mail_smpt_parameters
