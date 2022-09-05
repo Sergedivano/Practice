@@ -52,7 +52,7 @@ function standalone_backup() {
 function check_freespace_on_master() {
     readonly CAPACITY_UPDATE=8
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
-    if [ "$FREE_SPACE" \> "$CAPACITY_UPDATE" ]; then
+    if [ "$FREE_SPACE" \< "$CAPACITY_UPDATE" ]; then
         echo "Для обновления требуется не менее 8 G свободного дискового пространства."
         echo "Cейчас доступно $FREE_SPACE G. Продолжить подготовку к обновлению? (yes/no)"
         read -r confirmation
@@ -65,47 +65,47 @@ function check_freespace_on_master() {
 
 # Скачивание и распаковка дистрибутива и слоя совместимости
 function download_tar_distribution_config() {
-    cd /root
-    wget "$BUILD_URL" -O standalone.tar.gz
-        echo "Скачивание дистрибутива выполнено."
-    tar -xvhf standalone.tar.gz
-        echo "Распаковка дистрибутива выполнена."
-    wget "$CONFIG_URL" -O config.tar.gz
-        echo "Скачивание конфигурационного файла выполнено."
-    tar -xvhf config.tar.gz -C standalone
-        echo "Распаковка конфигурационного файла выполнена."
+    echo "Выполняется скачивание дистрибутива:"
+    wget "$BUILD_URL" -O "$MAINPATH".tar.gz
+    echo "Скачивание дистрибутива выполнено."
+
+    tar -xvhf "$MAINPATH".tar.gz
+    echo "Распаковка дистрибутива выполнена."
+
+    echo "Выполняется скачивание конфигурационного файла:"
+    wget "$CONFIG_URL" -O /root/config.tar.gz
+    echo "Скачивание конфигурационного файла выполнено."
+
+    tar -xvhf /root/config.tar.gz -C "$MAINPATH"
+    echo "Распаковка конфигурационного файла выполнена."
 }
 
 #Копирование файла config из backup с дистрибутивом в новый 
 function copy_config() {
-    cd /root
-    SEARCHER_CONFIG=""$MAINPATH_BACKUP"/.config/config"
-    if [[ -z "$SEARCHER_CONFIG" ]]; then
+    if [[ ! -f "$MAINPATH_BACKUP"/.config/config ]]; then
         echo "Конфигурационный файл $MAINPATH_BACKUP не найден."
+        echo "Подготовка к обновлению прекращена."
         exit 1
-    else 
-        cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
-        echo "Копирование конфигурационного файла в директорию $MAINPATH_CONFIG выполнено." 
+    fi
+    cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
+    echo "Копирование конфигурационного файла в директорию $MAINPATH_CONFIG выполнено."   
 }
 
-# Копирование файлов install*.pem* из backup с дистрибутивом в новый 
-function copy_install*() {
-    cd /root
-    SEARCHER_INSTALL_PEM=""$MAINPATH_BACKUP"/.config/install*.pem"
-    SEARCHER_INSTALL_PEMPUB=""$MAINPATH_BACKUP"/.config/install*.pem.pub"
-    if [[ ! -z "$SEARCHER_INSTALL_PEM" ]] || [[ ! -z "$SEARCHER_INSTALL_PEMPUB" ]]; then   
-        echo "$SEARCHER_INSTALL_PEM и $SEARCHER_INSTALL_PEMPUB найден. Будет выполнено копирование."
-            cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem   
-            cp "$MAINPATH_BACKUP"/.config/installer.pem.pub "$MAINPATH_CONFIG"/installer.pem.pub
-            cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem     
-            cp "$MAINPATH_BACKUP"/.config/installkey.pem.pub "$MAINPATH_CONFIG"/installkey.pem.pub 
-        echo "Копирование выполнено" 
-    else
-        echo "$SEARCHER_INSTALL_PEM и $SEARCHER_INSTALL_PEMPUB не найден."
-        exit 1
-    fi     
-}
+# Копирование файлов installer.pem, installkey.pem из backup с дистрибутивом в новый
+function copy_installkey_installer() { 
+    if [[ ! -f "$MAINPATH_BACKUP"/.config/installer.pem ]]; then
+        return
+    fi
+        cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem
+        echo "Выполнено копирование installer.pem в $MAINPATH_CONFIG"
 
+    if [[ ! -f "$MAINPATH_BACKUP"/.config/installkey.pem ]]; then
+        return
+    fi
+        cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem
+        echo "Выполнено копирование installkey.pem в $MAINPATH_CONFIG"
+}
+ 
 # Установка jq
 function install_jq() {
     if [[ -z "$(command -v jq)" ]]; then
@@ -139,9 +139,9 @@ function try_get_custom_certificate() {
 function try_get_mail_smpt_parameters() {
     readonly K8S_VERSION_MAJOR=1
     readonly K8S_VERSION_MINOR=19
-    if [ $(kubectl version -o json | jq '.serverVersion.major') != "$K8S_VERSION_MAJOR" ] && [ $(kubectl version -o json | jq '.serverVersion.minor') \< "$K8S_VERSION_MINOR" ]; then
+    if [ $(kubectl version -o json | jq '.serverVersion.major') \> "$K8S_VERSION_MAJOR" ] || [ $(kubectl version -o json | jq '.serverVersion.minor') \> "$K8S_VERSION_MINOR" ]; then
         return
-    fi    
+    fi
     LEARN_APP_POD_NAME=$(kubectl -n standalone get pod --field-selector=status.phase=Running -l app=learn,tier=frontend -o jsonpath='{.items[0].metadata.name}')
     LEARN_APP_SECRET_NAME=$(kubectl -n standalone get pod "$LEARN_APP_POD_NAME" -o jsonpath='{.spec.containers[0].envFrom}' | jq -r '.[] | select(.secretRef.name | test("learn-app-env-secret.*")?) | .secretRef.name')
     # из секрета получаем логин от smtp сервера
@@ -150,8 +150,8 @@ function try_get_mail_smpt_parameters() {
     MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
     # дополняем файл настроек с кредами к почтовику
     printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
-        | tee -a "$MAINPATH_CONFIG"/config > /dev/null
-    echo "Учетные данные smtp-сервера сохранены в файл $MAINPATH_CONFIG/config"    
+        | tee -a "$MAINPATH_CONFIG"/config
+    echo "Учетные данные smtp-сервера сохранены в файл $MAINPATH_CONFIG/config"
 }
 
 # Сообщения, после подготовки к обновлению
@@ -166,16 +166,16 @@ function messages_after_preparing() {
 main() {
     PREPARING_CONFIG=$1
     source "$PREPARING_CONFIG"
+
     check_preparing_config
     standalone_backup
     check_freespace_on_master
     download_tar_distribution_config
     copy_config
-    copy_install*
+    copy_installkey_installer
     install_jq
     try_get_custom_certificate
     try_get_mail_smpt_parameters
     messages_after_preparing
 }
-
 main $1
