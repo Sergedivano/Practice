@@ -2,9 +2,9 @@
 
 set -o errexit
 
-readonly MAINPATH="/root/standalone"
-readonly MAINPATH_CONFIG=""$MAINPATH"/.config"
-readonly MAINPATH_BACKUP=""$MAINPATH"-backup-$(date +%F)"
+readonly STANDALONE_DIR="/root/standalone"
+readonly STANDALONE_CONFIG_DIR=""$STANDALONE_DIR"/.config"
+readonly STANDALONE_BACKUP=""$STANDALONE_DIR"-backup-$(date +%F)"
 
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
@@ -40,11 +40,11 @@ function check_preparing_config() {
 
 # Бэкап старой версии дистрибутива
 function standalone_backup() {
-    if [ ! -d "$MAINPATH_BACKUP" ]; then
-        mv "$MAINPATH" "$MAINPATH_BACKUP"
-        echo "Backup директории $MAINPATH выполнен."
+    if [ ! -d "$STANDALONE_BACKUP" ]; then
+        mv "$STANDALONE_DIR" "$STANDALONE_BACKUP"
+        echo "Backup директории $STANDALONE_DIR выполнен."
     else
-        echo "Backup директории $MAINPATH был выполнен ранее."
+        echo "Backup директории $STANDALONE_DIR был выполнен ранее."
     fi
 }
 
@@ -64,46 +64,46 @@ function check_freespace_on_master() {
 }
 
 # Скачивание и распаковка дистрибутива и слоя совместимости
-function download_tar_distribution_config() {
+function download_build_and_compatibility() {
     echo "Выполняется скачивание дистрибутива:"
-    wget "$BUILD_URL" -O "$MAINPATH".tar.gz
+    wget "$BUILD_URL" -O "$STANDALONE_DIR".tar.gz
     echo "Скачивание дистрибутива выполнено."
 
-    tar -xvhf "$MAINPATH".tar.gz
+    tar -xvhf "$STANDALONE_DIR".tar.gz
     echo "Распаковка дистрибутива выполнена."
 
     echo "Выполняется скачивание конфигурационного файла:"
     wget "$CONFIG_URL" -O /root/config.tar.gz
     echo "Скачивание конфигурационного файла выполнено."
 
-    tar -xvhf /root/config.tar.gz -C "$MAINPATH"
+    tar -xvhf /root/config.tar.gz -C "$STANDALONE_DIR"
     echo "Распаковка конфигурационного файла выполнена."
 }
 
 #Копирование файла config из backup с дистрибутивом в новый 
 function copy_config() {
-    if [[ ! -f "$MAINPATH_BACKUP"/.config/config ]]; then
-        echo "Конфигурационный файл $MAINPATH_BACKUP не найден."
+    if [[ ! -f "$STANDALONE_BACKUP"/.config/config ]]; then
+        echo "Конфигурационный файл $STANDALONE_BACKUP не найден."
         echo "Подготовка к обновлению прекращена."
         exit 1
     fi
-    cp "$MAINPATH_BACKUP"/.config/config "$MAINPATH_CONFIG"/config
-    echo "Копирование конфигурационного файла в директорию $MAINPATH_CONFIG выполнено."   
+    cp "$STANDALONE_BACKUP"/.config/config "$STANDALONE_CONFIG_DIR"/config
+    echo "Копирование конфигурационного файла в директорию $STANDALONE_CONFIG_DIR выполнено."   
 }
 
 # Копирование файлов installer.pem, installkey.pem из backup с дистрибутивом в новый
-function copy_installkey_installer() { 
-    if [[ ! -f "$MAINPATH_BACKUP"/.config/installer.pem ]]; then
+function copy_installer_user_key() { 
+    if [[ ! -f "$STANDALONE_BACKUP"/.config/installer.pem ]]; then
         return
     fi
-        cp "$MAINPATH_BACKUP"/.config/installer.pem "$MAINPATH_CONFIG"/installer.pem
-        echo "Выполнено копирование installer.pem в $MAINPATH_CONFIG"
+    cp "$STANDALONE_BACKUP"/.config/installer.pem "$STANDALONE_CONFIG_DIR"/installer.pem
+    echo "Выполнено копирование installer.pem в $STANDALONE_CONFIG_DIR"
 
-    if [[ ! -f "$MAINPATH_BACKUP"/.config/installkey.pem ]]; then
+    if [[ ! -f "$STANDALONE_BACKUP"/.config/installkey.pem ]]; then
         return
     fi
-        cp "$MAINPATH_BACKUP"/.config/installkey.pem "$MAINPATH_CONFIG"/installkey.pem
-        echo "Выполнено копирование installkey.pem в $MAINPATH_CONFIG"
+    cp "$STANDALONE_BACKUP"/.config/installkey.pem "$STANDALONE_CONFIG_DIR"/installkey.pem
+    echo "Выполнено копирование installkey.pem в $STANDALONE_CONFIG_DIR"
 }
  
 # Установка jq
@@ -125,14 +125,14 @@ function try_get_custom_certificate() {
     # в случае кастомного сертификата сохранить сертификат в файл
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.crt}' \
         | base64 -d \
-        | tee "$MAINPATH_CONFIG"/tls-cert.pem > /dev/null
+        | tee "$STANDALONE_CONFIG_DIR"/tls-cert.pem > /dev/null
     kubectl -n standalone get secret "$TLS_SECRET_NAME" -o jsonpath='{.data.tls\.key}' \
         | base64 -d \
-        | tee "$MAINPATH_CONFIG"/tls-key.pem > /dev/null
+        | tee "$STANDALONE_CONFIG_DIR"/tls-key.pem > /dev/null
     # дополнить конфиг-файл путями до сертификатов
     printf "\nTLS_CERTIFICATE_FILE=%q\nTLS_CERTIFICATE_KEY_FILE=%q\n" "tls-cert.pem" "tls-key.pem" \
-        | tee -a "$MAINPATH_CONFIG"/config
-        echo "Информация о Custom certificate сохранена в файл $MAINPATH_CONFIG/config"
+        | tee -a "$STANDALONE_CONFIG_DIR"/config
+    echo "Информация о Custom certificate сохранена в файл $STANDALONE_CONFIG_DIR/config"
 }
 
 # Копирование секретов smtp-сервера в случае K8S 1.19 и выше
@@ -150,17 +150,17 @@ function try_get_mail_smpt_parameters() {
     MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
     # дополняем файл настроек с кредами к почтовику
     printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
-        | tee -a "$MAINPATH_CONFIG"/config
-    echo "Учетные данные smtp-сервера сохранены в файл $MAINPATH_CONFIG/config"
+        | tee -a "$STANDALONE_CONFIG_DIR"/config
+    echo "Учетные данные smtp-сервера сохранены в файл $STANDALONE_CONFIG_DIR/config"
 }
 
 # Сообщения, после подготовки к обновлению
 function messages_after_preparing() {
-        echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
-        echo "Для запуска обновления выполните следующие шаги:
-        1. Выполните команду screen
-        2. В screen-сессий выполните cd $MAINPATH
-        3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
+    echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
+    echo "Для запуска обновления выполните следующие шаги:
+    1. Выполните команду screen
+    2. В screen-сессий выполните cd $STANDALONE_DIR
+    3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
 main() {
@@ -170,9 +170,9 @@ main() {
     check_preparing_config
     standalone_backup
     check_freespace_on_master
-    download_tar_distribution_config
+    download_build_and_compatibility
     copy_config
-    copy_installkey_installer
+    copy_installer_user_key
     install_jq
     try_get_custom_certificate
     try_get_mail_smpt_parameters
