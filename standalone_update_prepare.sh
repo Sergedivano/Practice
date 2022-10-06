@@ -3,8 +3,8 @@
 set -o errexit
 
 readonly STANDALONE_DIR="/root/standalone"
-readonly STANDALONE_CONFIG_DIR=""$STANDALONE_DIR"/.config"
-readonly STANDALONE_BACKUP=""$STANDALONE_DIR"-backup-$(date +%F)"
+readonly STANDALONE_CONFIG_DIR="$STANDALONE_DIR/.config"
+readonly STANDALONE_BACKUP="$STANDALONE_DIR-backup-$(date +%F)"
 
 # ПРОВЕРКА ПРАВ АДМИНА
 ROOT_UID=0
@@ -20,20 +20,19 @@ if [ $(kubectl get namespaces | grep -c -i standalone) != 1 ] ; then
 fi
 
 if [[ -z "$1" ]]; then
-    echo "Необходимо передать путь к файлу 'preparing_config'."
-    echo "Пример команды для запуска скрипта подготовки к обновлению:
-    ./preparing_update_standalone.sh /root/preparing_config"
+    echo "Необходимо передать путь к файлу 'prepare.config'."
+    echo "Пример команды для запуска скрипта подготовки к обновлению:\n./standalone_update_prepare.sh /root/prepare.config"
     exit 1
 fi
 
-# Проверка наличия файла 'preparing_config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
-function check_preparing_config() {
+# Проверка наличия файла 'prepare.config', содержащий URL-ссылки на дистрибутив и конфигурационный файл
+function check_config() {
     if [[ -z "$BUILD_URL" ]]; then
-        echo "Скрипт ожидает URL-ссылку на дистрибутив в 'preparing_config' в строке BUILD_URL="
+        echo "Скрипт ожидает URL-ссылку на дистрибутив в 'prepare.config' в строке BUILD_URL="
         exit 1
     fi
     if [[ -z "$CONFIG_URL" ]]; then
-        echo "Скрипт ожидает URL-ссылку на конфигурационный файл в 'preparing_config' в строке CONFIG_URL="
+        echo "Скрипт ожидает URL-ссылку на конфигурационный файл в 'prepare.config' в строке CONFIG_URL="
         exit 1
     fi
 }
@@ -50,10 +49,10 @@ function standalone_backup() {
 
 # Проверка свободного пространства на master
 function check_freespace_on_master() {
-    readonly CAPACITY_UPDATE=8
+    readonly REQUIRED_UPDATE=8
     FREE_SPACE=$(expr $(df -m / | awk '{print $4}' | tail +2) / 1024) #преобразуем из Мегабайты в Гигабайты
-    if [ "$FREE_SPACE" \< "$CAPACITY_UPDATE" ]; then
-        echo "Для обновления требуется не менее 8 G свободного дискового пространства."
+    if [ "$FREE_SPACE" \< "$REQUIRED_UPDATE" ]; then
+        echo "Для обновления требуется не менее $REQUIRED_UPDATE G свободного дискового пространства."
         echo "Cейчас доступно $FREE_SPACE G. Продолжить подготовку к обновлению? (yes/no)"
         read -r confirmation
         if [ "$confirmation" == 'no' ]; then
@@ -93,17 +92,17 @@ function copy_config() {
 
 # Копирование файлов installer.pem, installkey.pem из backup с дистрибутивом в новый
 function copy_installer_user_key() { 
-    if [[ ! -f "$STANDALONE_BACKUP"/.config/installer.pem ]]; then
+    if [[ -f "$STANDALONE_BACKUP"/.config/installer.pem ]]; then
+        cp "$STANDALONE_BACKUP"/.config/installer.pem "$STANDALONE_CONFIG_DIR"/installer.pem
+        echo "Выполнено копирование installer.pem в $STANDALONE_CONFIG_DIR"
         return
     fi
-    cp "$STANDALONE_BACKUP"/.config/installer.pem "$STANDALONE_CONFIG_DIR"/installer.pem
-    echo "Выполнено копирование installer.pem в $STANDALONE_CONFIG_DIR"
 
-    if [[ ! -f "$STANDALONE_BACKUP"/.config/installkey.pem ]]; then
+    if [[ -f "$STANDALONE_BACKUP"/.config/installkey.pem ]]; then
+        cp "$STANDALONE_BACKUP"/.config/installkey.pem "$STANDALONE_CONFIG_DIR"/installkey.pem
+        echo "Выполнено копирование installkey.pem в $STANDALONE_CONFIG_DIR"
         return
-    fi
-    cp "$STANDALONE_BACKUP"/.config/installkey.pem "$STANDALONE_CONFIG_DIR"/installkey.pem
-    echo "Выполнено копирование installkey.pem в $STANDALONE_CONFIG_DIR"
+    fi    
 }
  
 # Установка jq
@@ -150,24 +149,21 @@ function try_get_mail_smpt_parameters() {
     MAIL_SMTP_PASSWORD=$(kubectl -n standalone get secret "$LEARN_APP_SECRET_NAME" -o jsonpath='{.data.PARAMETERS_MAIL_SMTP_PASSWORD}' | base64 -d)
     # дополняем файл настроек с кредами к почтовику
     printf "\nPARAMETERS_MAIL_SMTP_USERNAME=%q\nPARAMETERS_MAIL_SMTP_PASSWORD=%q\n" "$MAIL_SMTP_USERNAME" "$MAIL_SMTP_PASSWORD" \
-        | tee -a "$STANDALONE_CONFIG_DIR"/config
+        | tee -a "$STANDALONE_CONFIG_DIR"/config 
     echo "Учетные данные smtp-сервера сохранены в файл $STANDALONE_CONFIG_DIR/config"
 }
 
 # Сообщения, после подготовки к обновлению
-function messages_after_preparing() {
+function messages_after_prepare() {
     echo "Подготовка к обновлению standalone СДО iSpring Learn завершена."
-    echo "Для запуска обновления выполните следующие шаги:
-    1. Выполните команду screen
-    2. В screen-сессий выполните cd $STANDALONE_DIR
-    3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
+    echo "Для запуска обновления выполните следующие шаги:\n1. Выполните команду screen\n2. В screen-сессий выполните cd $STANDALONE_DIR\n3. Запустите скрипт обновления install.sh с записью обновления в лог-файл: ./install.sh 2>&1 | tee install.log"
 }
 
 main() {
-    PREPARING_CONFIG=$1
-    source "$PREPARING_CONFIG"
+    PREPARE_CONFIG=$1
+    source "$PREPARE_CONFIG"
 
-    check_preparing_config
+    check_config
     standalone_backup
     check_freespace_on_master
     download_build_and_compatibility
@@ -176,6 +172,6 @@ main() {
     install_jq
     try_get_custom_certificate
     try_get_mail_smpt_parameters
-    messages_after_preparing
+    messages_after_prepare
 }
 main $1
